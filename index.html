@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRANSIT // AGGLO - Simulateur de Réseau Urbain</title>
+  
+  <!-- Polices -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Style personnalisé -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="top-left">
+      <div class="brand-section"><div class="brand-title">Transit // Agglo</div></div>
+      <div class="operator-badge-hud" id="hud-operator-container"></div>
+      <div class="city-badge" id="hud-city">GRENOBLE</div>
+      <div class="metric-group"><div class="metric-label">Date & Heure</div><div class="metric-value" id="hud-clock">J1 - 07:00</div></div>
+    </div>
+
+    <!-- BANNIÈRE D'ÉVÉNEMENT ACTIF -->
+    <div id="hud-event-pill" class="event-pill-container" style="display: none;">
+      <span class="event-icon">⚡</span>
+      <span id="hud-event-title" class="event-text">Match de gala</span>
+      <span id="hud-event-timer" class="event-timer">3h</span>
+    </div>
+
+    <div class="top-metrics">
+      <div class="metric-group">
+        <div class="metric-label">Satisfaction Usagers</div>
+        <div class="metric-value" id="hud-satisfaction">😊 75%</div>
+      </div>
+      <div class="metric-group">
+        <div class="metric-label">Budget d'Investissement</div>
+        <div class="metric-value" id="hud-treasury">280 000 000 €</div>
+        <div class="metric-sub" id="hud-cashflow">+0 €/h</div>
+      </div>
+      <div class="metric-group">
+        <div class="metric-label">Congestion Agglo</div>
+        <div class="metric-value" id="hud-congestion">75%</div>
+        <div class="progress-bar-container" style="width: 75px;"><div id="hud-congestion-bar" class="progress-bar-fill" style="width: 75%; background: var(--accent-red);"></div></div>
+      </div>
+      <div class="metric-group">
+        <div class="metric-label">Part Modale TC</div>
+        <div class="metric-value" id="hud-modal-share">12.5%</div>
+      </div>
+      <div class="metric-group">
+        <div class="metric-label">Voyageurs (24h)</div>
+        <div class="metric-value" id="hud-passengers">0</div>
+      </div>
+    </div>
+
+    <div class="top-controls">
+      <button type="button" class="btn-speed" data-speed="1">1x</button>
+      <button type="button" class="btn-speed" data-speed="2">2x</button>
+      <button type="button" class="btn-speed" data-speed="5">5x</button>
+      <button type="button" class="btn-speed active" data-speed="0">||</button>
+      <button type="button" class="btn-action btn-primary" id="btn-open-saves-hud">Sauvegardes</button>
+      <button type="button" class="btn-action" id="btn-open-menu">Menu</button>
+    </div>
+  </header>
+
+  <!-- CARTE PRINCIPALE -->
+  <main id="main-viewport">
+    <div id="map"></div>
+
+    <!-- PANNEAU DE FILTRES MULTICOUCHES -->
+    <div id="layer-filter-panel">
+      <div class="filter-header">
+        <span>Affichage Carte</span>
+        <span id="btn-toggle-all-filters" style="cursor:pointer; color:var(--accent-blue); font-size:9px;">Tout / Rien</span>
+      </div>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-transport" checked><span>Gares & Transports</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-sante" checked><span>Santé & Hôpitaux</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-commerce" checked><span>Centres Commerciaux</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-culture" checked><span>Culture & Patrimoine</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-parcs" checked><span>Parcs & Espaces Verts</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-sport" checked><span>Sport & Stades</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-enseignement" checked><span>Campus & Recherche</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-admin" checked><span>Institutions & Congrès</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-districts" checked><span>Quartiers & Congestion</span></label>
+      <label class="filter-item"><input type="checkbox" id="filter-chk-transit" checked><span>Réseau TC (Lignes & Arrêts)</span></label>
+    </div>
+
+    <!-- INSPECTEUR -->
+    <div id="inspector-panel">
+      <div class="panel-header">
+        <span id="inspector-title">Vue d'ensemble</span>
+        <span id="inspector-badge" style="font-size: 10px; color: var(--text-muted);">AGGLO</span>
+      </div>
+      <div class="panel-content" id="inspector-body"></div>
+    </div>
+
+    <!-- BARRE CONTEXTUELLE DE TRACÉ -->
+    <div id="build-toolbar" style="display: none;">
+      <span class="mode-tag-pill" id="build-mode-badge" style="background:#1e3a8a; color:#93c5fd;">BUS BHNS</span>
+      <span style="font-size: 11px; color: var(--text-muted);" id="build-status-text">Cliquez sur les arrêts pour ajouter / retirer</span>
+      <button type="button" class="btn-action" id="btn-pop-station" style="padding: 4px 8px; font-size: 10px;">Retirer dernier arrêt</button>
+      <button type="button" class="btn-action" id="btn-cancel-build" style="padding: 4px 8px; font-size: 10px;">Annuler</button>
+      <button type="button" class="btn-action btn-primary" id="btn-finish-build" style="padding: 4px 12px; font-size: 10px;">Configurer & Valider</button>
+    </div>
+
+    <!-- DOCK PRINCIPAL -->
+    <div id="bottom-dock">
+      <button type="button" class="dock-btn active" data-tool="inspect"><span>Inspection</span><span class="btn-shortcut">[Q]</span></button>
+      <button type="button" class="dock-btn" data-tool="station-bus"><span>Arrêt Bus</span><span class="btn-shortcut">40 k€</span></button>
+      <button type="button" class="dock-btn" data-tool="station-tram"><span>Station Tram</span><span class="btn-shortcut">250 k€</span></button>
+      <button type="button" class="dock-btn" data-tool="station-metro"><span>Station Métro</span><span class="btn-shortcut">1.2 M€</span></button>
+      <button type="button" class="dock-btn" data-tool="create-line"><span>Tracer Ligne</span><span class="btn-shortcut">[L]</span></button>
+      <button type="button" class="dock-btn" data-tool="view-od-flows"><span>Flux & Demande</span><span class="btn-shortcut">[D]</span></button>
+      <button type="button" class="dock-btn" data-tool="statistics"><span>Statistiques</span><span class="btn-shortcut">[S]</span></button>
+      <button type="button" class="dock-btn" data-tool="manage-lines"><span>Flottes & Lignes</span><span class="btn-shortcut">[F]</span></button>
+    </div>
+
+    <!-- TOAST -->
+    <div id="notif-toast">Notification</div>
+  </main>
+
+  <!-- 1. MENU PRINCIPAL D'ACCUEIL -->
+  <div id="start-menu-modal" class="fullscreen-modal">
+    <div class="start-title">TRANSIT // AGGLO</div>
+    <div class="start-subtitle">Planification et aménagement des transports urbains de France</div>
+    <div class="start-actions-grid">
+      <button type="button" class="btn-start-menu" id="btn-menu-new-game">Nouvelle partie<span class="sub">Sélectionnez une agglomération et développez son réseau</span></button>
+      <button type="button" class="btn-start-menu" id="btn-menu-load-file">Charger une partie<span class="sub">Accéder au dossier des sauvegardes locales</span></button>
+      <input type="file" id="file-load-input" accept=".json" style="display: none;">
+    </div>
+  </div>
+
+  <!-- 2. SÉLECTION DE VILLE (7 MÉTROPOLES) -->
+  <div id="city-picker-modal" class="fullscreen-modal" style="display: none;">
+    <div class="city-picker-screen">
+      <h1 class="city-picker-title">Choisissez une ville</h1>
+      <div class="city-cards-grid">
+        <div class="city-choice-card" data-city="grenoble">
+          <img src="images/grenoble.png" class="city-card-img" onerror="this.src='images/Grenoble.png';">
+          <div class="city-card-banner">Grenoble Alpes Métropole</div>
+        </div>
+        <div class="city-choice-card" data-city="lyon">
+          <img src="images/lyon.png" class="city-card-img" onerror="this.src='images/Lyon.png';">
+          <div class="city-card-banner">Métropole Grand Lyon</div>
+        </div>
+        <div class="city-choice-card" data-city="bordeaux">
+          <img src="images/bordeaux.png" class="city-card-img" onerror="this.src='images/Bordeaux.png';">
+          <div class="city-card-banner">Bordeaux Métropole</div>
+        </div>
+        <div class="city-choice-card" data-city="nantes">
+          <img src="images/nantes.png" class="city-card-img" onerror="this.src='images/Nantes.png';">
+          <div class="city-card-banner">Nantes Métropole</div>
+        </div>
+        <div class="city-choice-card" data-city="marseille">
+          <img src="images/marseille.png" class="city-card-img" onerror="this.src='images/Marseille.png';">
+          <div class="city-card-banner">Aix-Marseille-Provence</div>
+        </div>
+        <div class="city-choice-card" data-city="strasbourg">
+          <img src="images/strasbourg.png" class="city-card-img" onerror="this.src='images/Strasbourg.png';">
+          <div class="city-card-banner">Eurométropole de Strasbourg</div>
+        </div>
+        <div class="city-choice-card" data-city="toulouse">
+          <img src="images/toulouse.png" class="city-card-img" onerror="this.src='images/Toulouse.png';">
+          <div class="city-card-banner">Toulouse Métropole</div>
+        </div>
+      </div>
+      <div style="margin-top: 28px;"><button type="button" class="btn-action" id="btn-back-to-main-menu">Retour au menu principal</button></div>
+    </div>
+  </div>
+
+  <!-- 3. CONFIGURATION DE L'ORGANISME ET DE LA DIFFICULTÉ -->
+  <div id="operator-picker-modal" class="fullscreen-modal" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-title" style="font-size: 18px; font-weight: 800;">Paramètres de la partie</div>
+      
+      <!-- SÉLECTION DE LA DIFFICULTÉ -->
+      <div style="margin-top: 4px;">
+        <label class="stat-row-label">Niveau de Difficulté</label>
+        <div class="difficulty-grid">
+          <button type="button" class="diff-btn" data-diff="tres_facile">Très facile</button>
+          <button type="button" class="diff-btn" data-diff="facile">Facile</button>
+          <button type="button" class="diff-btn selected" data-diff="moyen">Moyen</button>
+          <button type="button" class="diff-btn" data-diff="difficile">Difficile</button>
+          <button type="button" class="diff-btn" data-diff="tres_difficile">Très difficile</button>
+        </div>
+      </div>
+
+      <!-- OPTION : ÉVÉNEMENTS ALÉATOIRES -->
+      <div class="setting-toggle-row">
+        <div>
+          <div style="font-weight: 700; color: #fff; font-size: 12px;">Événements aléatoires</div>
+          <div style="font-size: 10px; color: var(--text-muted);">Matchs de foot, concerts, pics de pollution, imprévus financiers</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="chk-random-events" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">Exploitant du réseau de transport :</div>
+      <div class="operator-grid">
+        <div class="operator-card selected" id="opt-official-operator">
+          <div style="font-size: 11px; text-transform: uppercase; color: var(--accent-cyan); font-weight: 700;">Réseau Officiel</div>
+          <img id="img-official-logo" src="images/mreso.png" class="operator-logo-img" onerror="this.style.display='none';">
+          <div id="txt-official-name" style="font-weight: 700; color: #fff; font-size: 14px;">M RÉSO</div>
+          <div style="font-size: 10px; color: var(--text-muted);">Exploitant officiel de l'agglomération</div>
+        </div>
+        <div class="operator-card" id="opt-custom-operator">
+          <div style="font-size: 11px; text-transform: uppercase; color: var(--accent-purple); font-weight: 700;">Nouvel Organisme</div>
+          <div id="preview-custom-op-badge" class="operator-logo-custom shape-rectangle" style="background: #38bdf8; font-size: 12px; min-width: 44px; height: 28px;">AOM</div>
+          <div style="font-weight: 700; color: #fff; font-size: 14px;">Régie Personnalisée</div>
+          <div style="font-size: 10px; color: var(--text-muted);">Créez votre propre marque</div>
+        </div>
+      </div>
+
+      <div id="custom-operator-fields" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;"><label class="stat-row-label">Sigle / Acronyme</label><input type="text" id="cust-op-acronym" class="input-field" value="TRANSIT" maxlength="8"></div>
+          <div style="flex: 2;"><label class="stat-row-label">Nom de l'exploitant</label><input type="text" id="cust-op-name" class="input-field" value="Régie Métropolitaine des Transports"></div>
+        </div>
+        <div>
+          <label class="stat-row-label">Forme du badge</label>
+          <div class="shape-options"><button type="button" class="shape-btn" data-op-shape="carre">Carré</button><button type="button" class="shape-btn selected" data-op-shape="rectangle">Rectangle</button><button type="button" class="shape-btn" data-op-shape="cercle">Cercle</button></div>
+        </div>
+        <div>
+          <label class="stat-row-label">Couleur identitaire</label>
+          <div class="color-swatches" id="op-swatches-container"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
+        <button type="button" class="btn-action" id="btn-back-to-cities">Précédent</button>
+        <button type="button" class="btn-action btn-primary" id="btn-confirm-operator">Lancer la simulation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. GESTIONNAIRE DE SAUVEGARDES -->
+  <div id="save-manager-modal" class="fullscreen-modal" style="display: none;">
+    <div class="modal-box" style="width: 780px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+        <div>
+          <div class="modal-title" style="font-size: 18px; font-weight: 800;">Dossier de Sauvegardes</div>
+          <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">saves/</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn-action btn-primary" id="btn-create-new-save" style="display: none;">+ Nouvelle Sauvegarde</button>
+          <button type="button" class="btn-action" id="btn-import-file-json">Importer fichier .json</button>
+        </div>
+      </div>
+
+      <div id="saves-list-container" class="saves-grid-container">
+        <!-- Rempli dynamiquement -->
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" class="btn-action" id="btn-close-save-manager">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. MODAL PERSONNALISATION DE LIGNE -->
+  <div id="line-customizer-modal" class="fullscreen-modal" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-title" id="customizer-title">Configuration de la ligne</div>
+      <div style="display: flex; gap: 16px; align-items: center; background: var(--bg-card); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div id="preview-badge-container"><div id="preview-badge" class="line-badge-render shape-carre" style="background:#38bdf8;">1</div></div>
+        <div><div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Aperçu réseau</div><div id="preview-full-title" style="font-weight: 700; color: #fff; font-size: 13px;">Ligne 1</div><div id="preview-mode-desc" style="font-size: 11px; color: var(--accent-cyan);">Métro Automatique Lourd</div></div>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <div style="flex: 1;"><label class="stat-row-label">Indice / Numéro</label><input type="text" id="cust-line-code" class="input-field" value="1" maxlength="4"></div>
+        <div style="flex: 2;"><label class="stat-row-label">Nom complet de la ligne</label><input type="text" id="cust-line-name" class="input-field" value="Ligne 1"></div>
+      </div>
+      <div>
+        <label class="stat-row-label">Forme du logo</label>
+        <div class="shape-options"><button type="button" class="shape-btn selected" data-shape="carre">Carré</button><button type="button" class="shape-btn" data-shape="rectangle">Rectangle</button><button type="button" class="shape-btn" data-shape="cercle">Cercle</button></div>
+      </div>
+      <div>
+        <label class="stat-row-label">Palette de couleur</label>
+        <div class="color-swatches" id="swatches-container"></div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
+        <button type="button" class="btn-action" id="btn-cancel-customizer">Annuler</button>
+        <button type="button" class="btn-action btn-primary" id="btn-save-customizer">Enregistrer & Valider</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCRIPTS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/data.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
